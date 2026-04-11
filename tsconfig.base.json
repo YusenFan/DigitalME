@@ -1,0 +1,23 @@
+{
+  "compilerOptions": {
+    /* 语言与环境 */
+    "target": "ES2023",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "lib": ["ES2023"],
+
+    /* 严格模式 — 捕获更多潜在错误 */
+    "strict": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+
+    /* 输出 */
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "esModuleInterop": true,
+
+    /* JSX — Ink 需要 React JSX 转换 */
+    "jsx": "react-jsx"
+  }
+}

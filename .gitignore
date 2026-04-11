@@ -1,0 +1,28 @@
+# 依赖
+node_modules/
+
+# 构建产物
+dist/
+
+# 运行时数据目录（用户本地数据，不应提交）
+.persona-engine/
+
+# 系统文件
+.DS_Store
+*.swp
+*.swo
+
+# 环境变量（可能包含 API key）
+.env
+.env.local
+
+# IDE
+.idea/
+.vscode/
+*.code-workspace
+
+# 日志
+*.log
+
+# pnpm
+.pnpm-debug.log
