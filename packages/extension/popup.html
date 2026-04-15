@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Persona Engine</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="container">
+    <!-- 头部 -->
+    <header class="header">
+      <h1>Persona Engine</h1>
+      <span id="connection-badge" class="badge badge-offline">offline</span>
+    </header>
+
+    <!-- 状态面板 -->
+    <section class="status-panel">
+      <div class="stat">
+        <span class="stat-label">Events today</span>
+        <span id="events-count" class="stat-value">0</span>
+      </div>
+      <div class="stat">
+        <span class="stat-label">Queued</span>
+        <span id="queue-count" class="stat-value">0</span>
+      </div>
+    </section>
+
+    <!-- 暂停/恢复 -->
+    <button id="pause-btn" class="btn btn-primary">
+      <span id="pause-icon">⏸</span>
+      <span id="pause-text">Pause</span>
+    </button>
+
+    <!-- 分隔线 -->
+    <hr class="divider">
+
+    <!-- 域名过滤设置 -->
+    <section class="settings-section">
+      <h2>Blocked Domains</h2>
+      <p class="hint">One domain per line. These sites won't be tracked.</p>
+      <textarea id="blocklist" rows="4" placeholder="bank.example.com&#10;mail.google.com"></textarea>
+
+      <h2>Daemon URL</h2>
+      <input id="daemon-url" type="text" placeholder="http://127.0.0.1:19000">
+    </section>
+
+    <!-- 保存按钮 -->
+    <button id="save-btn" class="btn btn-secondary">Save Settings</button>
+
+    <!-- Flush 按钮（有离线事件时显示） -->
+    <button id="flush-btn" class="btn btn-secondary" style="display:none">
+      Flush Queued Events
+    </button>
+  </div>
+
+  <script src="dist/popup.js"></script>
+</body>
+</html>

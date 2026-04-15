@@ -36,3 +36,6 @@ Persona Engine is an local-first system that actively builds a living behavioral
 
 不要写只是重申代码的注释。
 
+
+#### 备注
+NOTE.md 是记录已经做过changes了，这里是按照每一个phase来记录的
