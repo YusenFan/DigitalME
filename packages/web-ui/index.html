@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Persona Chat</title>
+  <link rel="stylesheet" href="/chat/style.css">
+</head>
+<body>
+  <div id="app">
+    <header>
+      <h1>Persona Chat</h1>
+      <span class="subtitle">your AI knows you</span>
+    </header>
+
+    <div id="messages"></div>
+
+    <form id="chat-form">
+      <input
+        type="text"
+        id="chat-input"
+        placeholder="Ask anything..."
+        autocomplete="off"
+        autofocus
+      />
+      <button type="submit" id="send-btn">Send</button>
+    </form>
+  </div>
+
+  <script src="/chat/chat.js"></script>
+</body>
+</html>

@@ -261,3 +261,80 @@ Phase 4 实现了 Persona Engine 的核心智能层 — Dreaming Engine，负责
 - `pnpm --filter @persona-engine/cli build` ✅
 - `persona --help` 显示 dream 命令 ✅
 - `persona dream --help` 显示 --since 选项 ✅
+
+---
+
+## 2026-04-15 — Phase 5: Chat + Retrieval
+
+### What was built
+
+Phase 5 实现了 persona-aware 聊天系统：向量化 memory/ 文件用于语义搜索，构建注入 USER.md + 相关记忆的系统提示，支持终端和 Web 两种聊天界面，流式输出。
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `packages/daemon/src/db/vectors.ts` | 向量存储 + 语义搜索 — embedding 生成（Vercel AI SDK）、SQLite 存储、余弦相似度 top-k 搜索、memory/ 同步 |
+| `packages/daemon/src/chat/retrieval.ts` | Memory-augmented 检索 — 为用户查询生成 embedding，语义搜索 memory/，返回 USER.md + 相关记忆片段 |
+| `packages/daemon/src/chat/session.ts` | 聊天会话管理 — 构建系统提示（USER.md + memory 上下文）、流式 LLM 调用、聊天消息存入 events.sqlite |
+| `packages/cli/src/commands/chat.ts` | `persona chat` CLI 命令 — 交互式终端聊天，readline 界面，流式输出 |
+| `packages/web-ui/index.html` | Web 聊天 UI — HTML 页面 |
+| `packages/web-ui/style.css` | Web 聊天 UI — 暗色主题样式 |
+| `packages/web-ui/chat.js` | Web 聊天 UI — SSE 流式接收、会话历史管理 |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `packages/daemon/src/server.ts` | 新增 `GET /api/user`, `POST /api/chat`（SSE 流式）, `GET /chat`（Web UI 静态文件） |
+| `packages/daemon/src/index.tsx` | 初始化向量表 `initVectorTable()` |
+| `packages/daemon/src/tui/App.tsx` | 底部提示改为 `[c] chat at http://127.0.0.1:19000/chat` |
+| `packages/cli/src/index.ts` | 注册 `chat` 子命令 |
+| `packages/cli/tsup.config.ts` | external 新增 `@ai-sdk/openai`, `ai` |
+
+### Tech decisions made
+
+1. **纯 JS 余弦相似度** — 不依赖 sqlite-vec 扩展，避免 native 扩展安装问题。向量以 JSON 数组存储在 TEXT 字段，JavaScript 端计算相似度。对 memory/ 文件数量（通常 < 100）足够高效。
+2. **整文件作为一个 chunk** — memory/ 文件通常不大（< 8KB），直接对整个文件生成单个 embedding，不做分块。截取前 8000 字符防止 token 超限。
+3. **Embedding 容错** — embedding API 不可用时聊天仍可工作，只是没有 memory 增强（只有 USER.md）。
+4. **SSE 流式响应** — POST /api/chat 返回 Server-Sent Events 格式，每个 token 一个 `data:` 事件。Web UI 用 `ReadableStream` 消费。
+5. **聊天消息双向存储** — 用户消息和助手回复都存入 events.sqlite（event_type: "chat_message"），metadata 区分 role。后续 dreaming 可以从聊天内容推断兴趣。
+6. **Web UI 由 daemon 直接 serve** — 静态文件在 `packages/web-ui/`，daemon server 通过文件路径提供。无需额外构建步骤。
+7. **CLI chat 独立于 daemon** — 与 dream 命令一样，直接初始化数据库和向量表运行，不需要 daemon。
+8. **会话历史截断** — 保留最近 20 条消息（10 轮对话），防止 context window 溢出。
+
+### API endpoints added
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/user` | GET | 返回 USER.md 内容 |
+| `/api/chat` | POST | 流式聊天（SSE），接受 `{message, history?}` |
+| `/chat` | GET | Web 聊天 UI 页面 |
+| `/chat/style.css` | GET | Web UI 样式 |
+| `/chat/chat.js` | GET | Web UI 脚本 |
+
+### Chat system architecture
+
+```
+用户输入消息
+    │
+    ├── 1. generateEmbedding(message)    → 查询向量
+    ├── 2. semanticSearch(queryVec, k=5) → 相关 memory 片段
+    ├── 3. readUserMd()                  → USER.md 全文
+    │
+    ▼
+buildSystemPrompt(userMd, memoryChunks)
+    │
+    ▼
+streamText(model, system, messages)
+    │
+    ├── onToken → 流式输出到终端/Web
+    ├── onDone  → 存入 events.sqlite
+    └── onError → 错误处理
+```
+
+### Build verification
+
+- `pnpm --filter @persona-engine/daemon build` ✅
+- `pnpm --filter @persona-engine/cli build` ✅
+- `persona --help` 显示 chat 命令 ✅

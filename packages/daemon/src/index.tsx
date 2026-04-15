@@ -17,6 +17,7 @@ import React from "react";
 import { render } from "ink";
 import { loadConfig, PID_FILE, ensureDataDir } from "./config.js";
 import { initDatabase, closeDatabase, getRecentEvents, getTodayStats } from "./db/events.js";
+import { initVectorTable } from "./db/vectors.js";
 import { createServer, startServer } from "./server.js";
 import { App } from "./tui/App.js";
 import { startScheduler, stopScheduler } from "./dreaming/scheduler.js";
@@ -33,8 +34,9 @@ async function main() {
   // ── 1. 加载配置 ─────────────────────────────
   const config = loadConfig();
 
-  // ── 2. 初始化数据库 ─────────────────────────
+  // ── 2. 初始化数据库 + 向量表 ────────────────
   initDatabase();
+  initVectorTable();
 
   // ── 3. 启动 HTTP 服务器 ─────────────────────
   // onEventInserted 回调：新事件写入后触发 TUI 重新渲染

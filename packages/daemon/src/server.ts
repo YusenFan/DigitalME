@@ -1,14 +1,19 @@
 /**
  * server.ts — Fastify HTTP API 服务器
  *
- * 提供三个端点：
+ * 端点：
  *   POST /api/events       — 接收单个浏览器事件
  *   POST /api/events/batch — 批量接收事件
  *   GET  /api/status       — daemon 健康状态 + 统计摘要
+ *   GET  /api/user         — 返回 USER.md 内容
+ *   POST /api/chat         — 流式聊天（SSE）
+ *   GET  /chat             — Web 聊天 UI
  *
- * 绑定 127.0.0.1 only（不暴露到网络），CORS 限制为 Chrome extension。
+ * 绑定 127.0.0.1 only（不暴露到网络），CORS 限制为 Chrome extension + localhost。
  */
 
+import fs from "node:fs";
+import path from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
 import { type PersonaConfig } from "./config.js";
@@ -20,6 +25,8 @@ import {
   type InsertEventInput,
   type EventType,
 } from "./db/events.js";
+import { readUserMd } from "./dreaming/updater.js";
+import { chat, type ChatMessage } from "./chat/session.js";
 
 // ── 类型定义 ────────────────────────────────────────────
 
@@ -36,6 +43,12 @@ interface PostEventBody {
 /** POST /api/events/batch 请求体 */
 interface PostEventBatchBody {
   events: PostEventBody[];
+}
+
+/** POST /api/chat 请求体 */
+interface PostChatBody {
+  message: string;
+  history?: ChatMessage[];
 }
 
 // ── 事件回调 ────────────────────────────────────────────
@@ -160,6 +173,79 @@ export async function createServer(
       browse_time_today_sec: stats.total_browse_sec,
       chat_messages_today: stats.chat_messages,
     });
+  });
+
+  // ── GET /api/user — 返回 USER.md 内容 ────────
+  app.get("/api/user", async (_request, reply) => {
+    const content = readUserMd();
+    return reply.send({ content });
+  });
+
+  // ── POST /api/chat — 流式聊天（SSE） ─────────
+  app.post<{ Body: PostChatBody }>("/api/chat", async (request, reply) => {
+    const { message, history = [] } = request.body;
+
+    if (!message || typeof message !== "string") {
+      return reply.status(400).send({ error: "message is required" });
+    }
+
+    // SSE 响应头
+    reply.raw.writeHead(200, {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      Connection: "keep-alive",
+    });
+
+    await chat(message, history, config, {
+      onToken(token) {
+        const data = JSON.stringify({ type: "token", content: token });
+        reply.raw.write(`data: ${data}\n\n`);
+      },
+      onDone(fullText) {
+        const data = JSON.stringify({ type: "done", content: fullText });
+        reply.raw.write(`data: ${data}\n\n`);
+        reply.raw.end();
+      },
+      onError(error) {
+        const data = JSON.stringify({ type: "error", content: error.message });
+        reply.raw.write(`data: ${data}\n\n`);
+        reply.raw.end();
+      },
+    });
+  });
+
+  // ── GET /chat — Web 聊天 UI ──────────────────
+  // 提供静态 HTML 文件作为简易聊天界面
+  const WEB_UI_DIR = path.resolve(import.meta.dirname, "../../web-ui");
+
+  app.get("/chat", async (_request, reply) => {
+    const htmlPath = path.join(WEB_UI_DIR, "index.html");
+    if (!fs.existsSync(htmlPath)) {
+      return reply.status(404).send({ error: "Web UI not found" });
+    }
+    const html = fs.readFileSync(htmlPath, "utf-8");
+    reply.header("Content-Type", "text/html; charset=utf-8");
+    return reply.send(html);
+  });
+
+  app.get("/chat/style.css", async (_request, reply) => {
+    const cssPath = path.join(WEB_UI_DIR, "style.css");
+    if (!fs.existsSync(cssPath)) {
+      return reply.status(404).send("");
+    }
+    const css = fs.readFileSync(cssPath, "utf-8");
+    reply.header("Content-Type", "text/css; charset=utf-8");
+    return reply.send(css);
+  });
+
+  app.get("/chat/chat.js", async (_request, reply) => {
+    const jsPath = path.join(WEB_UI_DIR, "chat.js");
+    if (!fs.existsSync(jsPath)) {
+      return reply.status(404).send("");
+    }
+    const js = fs.readFileSync(jsPath, "utf-8");
+    reply.header("Content-Type", "application/javascript; charset=utf-8");
+    return reply.send(js);
   });
 
   return app;

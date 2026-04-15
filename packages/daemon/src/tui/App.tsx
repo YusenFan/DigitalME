@@ -124,7 +124,7 @@ export function App({
       <Box paddingX={1} gap={2}>
         <Text dimColor>[q] quit</Text>
         <Text dimColor>[d] dream{isDreaming ? " (running...)" : ""}</Text>
-        <Text dimColor>[s] status</Text>
+        <Text dimColor>[c] chat at http://127.0.0.1:19000/chat</Text>
       </Box>
     </Box>
   );

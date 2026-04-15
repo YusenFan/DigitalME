@@ -12,6 +12,7 @@ import { stopCommand } from "./commands/stop.js";
 import { statusCommand } from "./commands/status.js";
 import { onboardCommand } from "./commands/onboard.js";
 import { dreamCommand } from "./commands/dream.js";
+import { chatCommand } from "./commands/chat.js";
 
 const program = new Command();
 
@@ -26,6 +27,7 @@ program.addCommand(startCommand);
 program.addCommand(stopCommand);
 program.addCommand(statusCommand);
 program.addCommand(dreamCommand);
+program.addCommand(chatCommand);
 
 // 解析命令行参数并执行
 program.parse();
