@@ -13,6 +13,12 @@ import { statusCommand } from "./commands/status.js";
 import { onboardCommand } from "./commands/onboard.js";
 import { dreamCommand } from "./commands/dream.js";
 import { chatCommand } from "./commands/chat.js";
+import { userCommand } from "./commands/user.js";
+import { memoryCommand } from "./commands/memory.js";
+import { eventsCommand } from "./commands/events.js";
+import { configCommand } from "./commands/config.js";
+import { resetCommand } from "./commands/reset.js";
+import { pauseCommand, resumeCommand } from "./commands/pause.js";
 
 const program = new Command();
 
@@ -28,6 +34,13 @@ program.addCommand(stopCommand);
 program.addCommand(statusCommand);
 program.addCommand(dreamCommand);
 program.addCommand(chatCommand);
+program.addCommand(userCommand);
+program.addCommand(memoryCommand);
+program.addCommand(eventsCommand);
+program.addCommand(configCommand);
+program.addCommand(resetCommand);
+program.addCommand(pauseCommand);
+program.addCommand(resumeCommand);
 
 // 解析命令行参数并执行
 program.parse();

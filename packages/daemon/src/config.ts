@@ -173,6 +173,64 @@ export function saveConfig(config: PersonaConfig): void {
   });
 }
 
+/**
+ * 验证配置文件的关键字段。
+ * 返回错误消息数组，空数组表示验证通过。
+ */
+export function validateConfig(config: PersonaConfig): string[] {
+  const errors: string[] = [];
+
+  // Daemon
+  if (config.daemon.port < 1 || config.daemon.port > 65535) {
+    errors.push(`daemon.port must be 1-65535, got ${config.daemon.port}`);
+  }
+
+  // LLM
+  if (!config.llm.provider) {
+    errors.push("llm.provider is required (e.g., openai, anthropic)");
+  }
+  if (!config.llm.model) {
+    errors.push("llm.model is required");
+  }
+
+  // Dreaming
+  if (config.dreaming.decayHalfLifeDays < 1) {
+    errors.push("dreaming.decayHalfLifeDays must be >= 1");
+  }
+  if (config.dreaming.userMdTokenBudget < 500) {
+    errors.push("dreaming.userMdTokenBudget must be >= 500");
+  }
+
+  // Events
+  if (config.events.retentionDays < 1) {
+    errors.push("events.retentionDays must be >= 1");
+  }
+
+  return errors;
+}
+
+/**
+ * 清理残留的 PID 文件（如果对应进程已不存在）。
+ * 返回 true 表示有残留且已清理。
+ */
+export function cleanStalePidFile(): boolean {
+  if (!fs.existsSync(PID_FILE)) return false;
+
+  const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
+  if (isNaN(pid)) {
+    fs.unlinkSync(PID_FILE);
+    return true;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return false; // 进程还在运行
+  } catch {
+    fs.unlinkSync(PID_FILE);
+    return true;
+  }
+}
+
 // ── 内部工具函数 ────────────────────────────────────────
 
 /**

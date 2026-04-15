@@ -26,3 +26,6 @@ persona-engine/
 
 # pnpm
 .pnpm-debug.log
+
+# Extension packaging
+*.zip

@@ -338,3 +338,86 @@ streamText(model, system, messages)
 - `pnpm --filter @persona-engine/daemon build` ✅
 - `pnpm --filter @persona-engine/cli build` ✅
 - `persona --help` 显示 chat 命令 ✅
+
+---
+
+## 2026-04-15 — Phase 6: Polish + Release
+
+### What was built
+
+Phase 6 完成了 v1 发布前的全部打磨工作：补齐所有 CLI 命令（共 13 条）、配置验证、错误恢复、测试基础设施、README 文档、扩展打包脚本。
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `packages/cli/src/commands/user.ts` | `persona user` — 查看/编辑 USER.md（支持 `--edit` 打开 $EDITOR） |
+| `packages/cli/src/commands/reset.ts` | `persona reset` — 完全清除所有 persona 数据（需确认，`--force` 跳过） |
+| `packages/cli/src/commands/memory.ts` | `persona memory [category]` — 浏览 memory/ 目录树，显示文件权重和更新时间 |
+| `packages/cli/src/commands/events.ts` | `persona events` — 查询 events.sqlite（支持 `--since`, `--status`, `--type`, `--limit`） |
+| `packages/cli/src/commands/config.ts` | `persona config` — 查看配置（API key 遮蔽）或修改（`--set key=value` dot notation） |
+| `packages/cli/src/commands/pause.ts` | `persona pause` / `persona resume` — 暂停/恢复浏览器事件采集 |
+| `tests/config.test.ts` | 配置验证测试（4 个测试用例） |
+| `tests/events-db.test.ts` | SQLite 事件存储测试（6 个测试用例） |
+| `tests/server-api.test.ts` | HTTP API 集成测试（5 个测试用例） |
+| `tests/cli.test.ts` | CLI 命令集成测试（8 个测试用例） |
+| `vitest.config.ts` | Vitest 测试配置 |
+| `README.md` | 完整项目 README（架构、安装、使用、配置、隐私） |
+| `packages/extension/scripts/package.js` | 扩展打包脚本 → 生成 `persona-extension-v0.1.0.zip` |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `packages/cli/src/index.ts` | 注册 7 个新子命令（user, memory, events, config, reset, pause, resume），总计 13 条 |
+| `packages/daemon/src/config.ts` | 新增 `validateConfig()` 配置验证、`cleanStalePidFile()` 残留 PID 清理 |
+| `packages/daemon/src/index.tsx` | 启动流程增加：残留 PID 清理、配置验证、数据库初始化错误处理、全局异常处理器 |
+| `packages/daemon/src/server.ts` | 事件端点增加采集暂停检查（`collection.browser.enabled`） |
+| `packages/extension/package.json` | 新增 `package` 脚本 |
+| `packages/cli/package.json` | 新增 `files`, `keywords` 字段用于 npm 发布 |
+| `package.json` | 新增 `test`, `test:watch` 脚本，新增 vitest + better-sqlite3 + fastify devDependencies |
+| `.gitignore` | 新增 `*.zip` |
+
+### CLI commands — complete list (13 commands)
+
+| Command | Description | Phase |
+|---------|-------------|-------|
+| `persona onboard` | 交互式问卷 + 目录扫描 + USER.md 生成 | Phase 2 |
+| `persona start` | 启动 daemon（前台/后台模式） | Phase 1 |
+| `persona stop` | 停止 daemon | Phase 1 |
+| `persona status` | 显示 daemon 状态和今日统计 | Phase 1 |
+| `persona dream [--since]` | 手动触发 dreaming | Phase 4 |
+| `persona chat` | 终端交互式聊天 | Phase 5 |
+| `persona user [--edit]` | 查看/编辑 USER.md | **Phase 6** |
+| `persona memory [category]` | 浏览 memory/ 目录 | **Phase 6** |
+| `persona events [--since] [--status] [--type]` | 查询事件 | **Phase 6** |
+| `persona config [--set] [--path]` | 查看/修改配置 | **Phase 6** |
+| `persona reset [--force]` | 清除所有数据 | **Phase 6** |
+| `persona pause` | 暂停浏览器采集 | **Phase 6** |
+| `persona resume` | 恢复浏览器采集 | **Phase 6** |
+
+### Error handling improvements
+
+1. **配置验证** — daemon 启动前验证所有关键配置字段（port 范围、provider 存在、token budget 下限）
+2. **残留 PID 清理** — daemon 启动时自动检测并清理上次崩溃残留的 PID 文件
+3. **数据库初始化容错** — SQLite 打开失败时给出清晰的错误信息和修复建议
+4. **全局异常处理** — uncaughtException 和 unhandledRejection 处理器确保 PID 文件和数据库连接在崩溃时被清理
+5. **采集暂停检查** — HTTP API 端点在采集暂停时返回 503，防止数据写入
+
+### Test infrastructure
+
+- **框架:** Vitest v4.1.4
+- **测试数量:** 23 个测试，4 个测试文件
+- **覆盖范围:** 配置验证、SQLite 操作、HTTP API、CLI 命令
+- **运行方式:** `pnpm test`（单次）或 `pnpm test:watch`（监听模式）
+- **隔离:** DB 测试使用临时文件（`os.tmpdir()`），测试后自动清理
+
+### Build verification
+
+- `pnpm build` 全部 3 个包编译成功 ✅
+- `pnpm test` 23 个测试全部通过 ✅
+- `persona --help` 显示全部 13 条命令 ✅
+- `persona config` 正确显示配置（API key 遮蔽） ✅
+- `persona memory` 显示 memory/ 树 ✅
+- `persona events --help` 显示所有选项 ✅
+- 扩展打包 `persona-extension-v0.1.0.zip`（26 KB）✅

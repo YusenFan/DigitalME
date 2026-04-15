@@ -2,12 +2,23 @@
   "name": "@persona-engine/cli",
   "version": "0.1.0",
   "private": true,
-  "description": "Persona Engine CLI — persona start/stop/status/dream/chat",
+  "description": "Persona Engine CLI — a system that actively understands you",
   "type": "module",
   "main": "dist/index.js",
   "bin": {
     "persona": "dist/index.js"
   },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "persona",
+    "ai",
+    "behavioral-model",
+    "local-first",
+    "llm",
+    "memory"
+  ],
   "scripts": {
     "build": "tsup",
     "dev": "tsup --watch",

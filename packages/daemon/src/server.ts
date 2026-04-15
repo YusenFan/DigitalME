@@ -16,7 +16,7 @@ import fs from "node:fs";
 import path from "node:path";
 import Fastify, { type FastifyInstance } from "fastify";
 import cors from "@fastify/cors";
-import { type PersonaConfig } from "./config.js";
+import { type PersonaConfig, loadConfig } from "./config.js";
 import {
   insertEvent,
   insertEventBatch,
@@ -97,6 +97,14 @@ export async function createServer(
   app.post<{ Body: PostEventBody }>("/api/events", async (request, reply) => {
     const body = request.body;
 
+    // 采集暂停时拒绝浏览器事件（chat_message 不受影响）
+    if (body.event_type !== "chat_message") {
+      const currentConfig = loadConfig();
+      if (!currentConfig.collection.browser.enabled) {
+        return reply.status(503).send({ error: "Collection is paused" });
+      }
+    }
+
     // 基本校验：event_type 必须是合法值
     const validTypes: EventType[] = [
       "page_visit",
@@ -132,6 +140,12 @@ export async function createServer(
     "/api/events/batch",
     async (request, reply) => {
       const { events } = request.body;
+
+      // 采集暂停时拒绝浏览器事件
+      const currentConfig = loadConfig();
+      if (!currentConfig.collection.browser.enabled) {
+        return reply.status(503).send({ error: "Collection is paused" });
+      }
 
       if (!Array.isArray(events) || events.length === 0) {
         return reply

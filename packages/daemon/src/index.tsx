@@ -15,7 +15,7 @@
 import fs from "node:fs";
 import React from "react";
 import { render } from "ink";
-import { loadConfig, PID_FILE, ensureDataDir } from "./config.js";
+import { loadConfig, PID_FILE, ensureDataDir, validateConfig, cleanStalePidFile } from "./config.js";
 import { initDatabase, closeDatabase, getRecentEvents, getTodayStats } from "./db/events.js";
 import { initVectorTable } from "./db/vectors.js";
 import { createServer, startServer } from "./server.js";
@@ -31,12 +31,32 @@ const TUI_REFRESH_INTERVAL_MS = 1000;
  * 任何步骤失败都会打印错误并退出进程。
  */
 async function main() {
-  // ── 1. 加载配置 ─────────────────────────────
+  // ── 0. 清理残留 PID 文件 ────────────────────
+  if (cleanStalePidFile()) {
+    console.log("Cleaned up stale PID file from previous crash.");
+  }
+
+  // ── 1. 加载配置 + 验证 ─────────────────────
   const config = loadConfig();
+  const configErrors = validateConfig(config);
+  if (configErrors.length > 0) {
+    console.error("Configuration errors:");
+    for (const err of configErrors) {
+      console.error(`  - ${err}`);
+    }
+    console.error('\nFix these in persona-engine/config.json or run "persona config --set key=value".');
+    process.exit(1);
+  }
 
   // ── 2. 初始化数据库 + 向量表 ────────────────
-  initDatabase();
-  initVectorTable();
+  try {
+    initDatabase();
+    initVectorTable();
+  } catch (err) {
+    console.error("Failed to initialize database:", (err as Error).message);
+    console.error("The database may be corrupted. Try running \"persona reset\" to start fresh.");
+    process.exit(1);
+  }
 
   // ── 3. 启动 HTTP 服务器 ─────────────────────
   // onEventInserted 回调：新事件写入后触发 TUI 重新渲染
@@ -150,7 +170,24 @@ async function main() {
 
 // ── 启动 ────────────────────────────────────────────────
 
+// 全局未捕获异常处理 — 确保 PID 文件被清理
+process.on("uncaughtException", (err) => {
+  console.error("Uncaught exception:", err);
+  try {
+    if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
+    closeDatabase();
+  } catch { /* best effort cleanup */ }
+  process.exit(1);
+});
+
+process.on("unhandledRejection", (reason) => {
+  console.error("Unhandled rejection:", reason);
+});
+
 main().catch((err) => {
   console.error("Daemon failed to start:", err);
+  try {
+    if (fs.existsSync(PID_FILE)) fs.unlinkSync(PID_FILE);
+  } catch { /* best effort */ }
   process.exit(1);
 });
