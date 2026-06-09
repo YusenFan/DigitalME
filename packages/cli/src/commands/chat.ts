@@ -12,7 +12,7 @@ import readline from "node:readline";
 import { Command } from "commander";
 import { loadConfig } from "../../../daemon/src/config.js";
 import { initDatabase, closeDatabase } from "../../../daemon/src/db/events.js";
-import type { ChatMessage } from "../../../daemon/src/chat/session.js";
+import type { AgentMessage } from "../../../daemon/src/agent/session.js";
 
 export const chatCommand = new Command("chat")
   .description("Start an interactive chat with your persona-aware AI")
@@ -27,7 +27,7 @@ export const chatCommand = new Command("chat")
 
     // 初始化事件数据库
     initDatabase();
-    const { chat } = await import("../../../daemon/src/chat/session.js");
+    const { streamAgentReply } = await import("../../../daemon/src/agent/session.js");
 
     console.log("");
     console.log("💬 Persona Chat — your AI knows you");
@@ -35,7 +35,7 @@ export const chatCommand = new Command("chat")
     console.log("   Type 'exit' or Ctrl+C to quit.");
     console.log("");
 
-    const history: ChatMessage[] = [];
+    const history: AgentMessage[] = [];
 
     const rl = readline.createInterface({
       input: process.stdin,
@@ -62,7 +62,7 @@ export const chatCommand = new Command("chat")
         process.stdout.write("\x1b[33mai>\x1b[0m ");
 
         try {
-          const reply = await chat(message, history, config, {
+          const reply = await streamAgentReply(message, history, config, {
             onToken(token) {
               process.stdout.write(token);
             },
