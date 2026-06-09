@@ -63,6 +63,13 @@ export interface TodayStats {
   pending_count: number; // 等待 dreaming 处理的事件数
 }
 
+/** Agent 可查询的最近事件过滤条件 */
+export interface RecentEventsQuery {
+  limit?: number;
+  status?: EventStatus;
+  type?: EventType;
+}
+
 // ── 数据库实例 ──────────────────────────────────────────
 
 /** 模块级数据库实例，由 initDatabase() 初始化 */
@@ -212,6 +219,32 @@ export function getRecentEvents(limit = 50): EventRow[] {
   return d
     .prepare("SELECT * FROM events ORDER BY created_at DESC LIMIT ?")
     .all(limit) as EventRow[];
+}
+
+/**
+ * 获取最近事件，支持 agent tool 所需的只读过滤。
+ */
+export function getRecentEventsForAgent(
+  query: RecentEventsQuery = {}
+): EventRow[] {
+  const d = getDatabase();
+  const clauses: string[] = [];
+  const params: Array<string | number> = [];
+  const limit = Math.min(Math.max(query.limit ?? 20, 1), 100);
+
+  if (query.status) {
+    clauses.push("status = ?");
+    params.push(query.status);
+  }
+  if (query.type) {
+    clauses.push("event_type = ?");
+    params.push(query.type);
+  }
+
+  const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+  return d
+    .prepare(`SELECT * FROM events ${where} ORDER BY created_at DESC LIMIT ?`)
+    .all(...params, limit) as EventRow[];
 }
 
 /**

@@ -9,5 +9,16 @@ export default defineConfig({
   sourcemap: true,
   clean: true,
   // 不打包 node_modules 中的依赖，运行时从 node_modules 加载
-  external: ["better-sqlite3", "ink", "react", "node-cron", "mem0ai", "mem0ai/oss"],
+  external: [
+    "better-sqlite3",
+    "ink",
+    "react",
+    "node-cron",
+    "mem0ai",
+    "mem0ai/oss",
+    "@mastra/core",
+    "@mastra/core/agent",
+    "@mastra/core/tools",
+    "zod",
+  ],
 });

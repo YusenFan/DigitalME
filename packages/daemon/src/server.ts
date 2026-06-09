@@ -26,7 +26,12 @@ import {
   type EventType,
 } from "./db/events.js";
 import { readUserMd } from "./dreaming/updater.js";
-import { chat, type ChatMessage } from "./chat/session.js";
+import {
+  generateAgentReply,
+  streamAgentReply,
+  type AgentMessage,
+  type PersonaAgentRunner,
+} from "./agent/session.js";
 
 // ── 类型定义 ────────────────────────────────────────────
 
@@ -48,13 +53,25 @@ interface PostEventBatchBody {
 /** POST /api/chat 请求体 */
 interface PostChatBody {
   message: string;
-  history?: ChatMessage[];
+  history?: AgentMessage[];
+}
+
+/** POST /api/agent/test 请求体 */
+interface PostAgentTestBody {
+  message: string;
+  history?: AgentMessage[];
+  includeDebug?: boolean;
 }
 
 // ── 事件回调 ────────────────────────────────────────────
 
 /** 新事件插入后的回调类型 — 用于通知 TUI 刷新 */
 export type OnEventInserted = (eventIds: number[]) => void;
+
+export interface CreateServerOptions {
+  agentRunner?: PersonaAgentRunner;
+  persistAgentMessages?: boolean;
+}
 
 // ── 服务器创建 ──────────────────────────────────────────
 
@@ -70,7 +87,8 @@ const startedAt = Date.now();
  */
 export async function createServer(
   config: PersonaConfig,
-  onEventInserted?: OnEventInserted
+  onEventInserted?: OnEventInserted,
+  options: CreateServerOptions = {}
 ): Promise<FastifyInstance> {
   const app = Fastify({
     logger: false, // TUI 模式下不需要 Fastify 自带日志
@@ -197,7 +215,8 @@ export async function createServer(
 
   // ── POST /api/chat — 流式聊天（SSE） ─────────
   app.post<{ Body: PostChatBody }>("/api/chat", async (request, reply) => {
-    const { message, history = [] } = request.body;
+    const body = request.body ?? ({} as PostChatBody);
+    const { message, history = [] } = body;
 
     if (!message || typeof message !== "string") {
       return reply.status(400).send({ error: "message is required" });
@@ -210,23 +229,60 @@ export async function createServer(
       Connection: "keep-alive",
     });
 
-    await chat(message, history, config, {
-      onToken(token) {
-        const data = JSON.stringify({ type: "token", content: token });
-        reply.raw.write(`data: ${data}\n\n`);
+    await streamAgentReply(
+      message,
+      history,
+      config,
+      {
+        onToken(token) {
+          const data = JSON.stringify({ type: "token", content: token });
+          reply.raw.write(`data: ${data}\n\n`);
+        },
+        onDone(fullText) {
+          const data = JSON.stringify({ type: "done", content: fullText });
+          reply.raw.write(`data: ${data}\n\n`);
+          reply.raw.end();
+        },
+        onError(error) {
+          const data = JSON.stringify({ type: "error", content: error.message });
+          reply.raw.write(`data: ${data}\n\n`);
+          reply.raw.end();
+        },
       },
-      onDone(fullText) {
-        const data = JSON.stringify({ type: "done", content: fullText });
-        reply.raw.write(`data: ${data}\n\n`);
-        reply.raw.end();
-      },
-      onError(error) {
-        const data = JSON.stringify({ type: "error", content: error.message });
-        reply.raw.write(`data: ${data}\n\n`);
-        reply.raw.end();
-      },
-    });
+      {
+        runner: options.agentRunner,
+        persistEvents: options.persistAgentMessages,
+      }
+    );
   });
+
+  // ── POST /api/agent/test — 非流式 agent 测试 API ─────
+  app.post<{ Body: PostAgentTestBody }>(
+    "/api/agent/test",
+    async (request, reply) => {
+      const body = request.body ?? ({} as PostAgentTestBody);
+      const { message, history = [], includeDebug = false } = body;
+
+      if (!message || typeof message !== "string") {
+        return reply.status(400).send({ error: "message is required" });
+      }
+
+      const result = await generateAgentReply(message, history, config, {
+        runner: options.agentRunner,
+        persistEvents: options.persistAgentMessages,
+      });
+
+      if (!includeDebug) {
+        return reply.send({ reply: result.reply });
+      }
+
+      return reply.send({
+        reply: result.reply,
+        toolCalls: result.toolCalls,
+        toolResults: result.toolResults,
+      });
+    }
+  );
 
   // ── GET /chat — Web 聊天 UI ──────────────────
   // 提供静态 HTML 文件作为简易聊天界面
