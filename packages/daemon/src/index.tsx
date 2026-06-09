@@ -17,7 +17,6 @@ import React from "react";
 import { render } from "ink";
 import { loadConfig, PID_FILE, ensureDataDir, validateConfig, cleanStalePidFile } from "./config.js";
 import { initDatabase, closeDatabase, getRecentEvents, getTodayStats } from "./db/events.js";
-import { initVectorTable } from "./db/vectors.js";
 import { createServer, startServer } from "./server.js";
 import { App } from "./tui/App.js";
 import { startScheduler, stopScheduler } from "./dreaming/scheduler.js";
@@ -48,10 +47,9 @@ async function main() {
     process.exit(1);
   }
 
-  // ── 2. 初始化数据库 + 向量表 ────────────────
+  // ── 2. 初始化数据库 ────────────────────────
   try {
     initDatabase();
-    initVectorTable();
   } catch (err) {
     console.error("Failed to initialize database:", (err as Error).message);
     console.error("The database may be corrupted. Try running \"persona reset\" to start fresh.");

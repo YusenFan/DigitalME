@@ -30,6 +30,7 @@
     "ai": "^6.0.158",
     "better-sqlite3": "^11.10.0",
     "commander": "^13.1.0",
+    "mem0ai": "^3.0.6",
     "node-cron": "^4.2.1"
   },
   "devDependencies": {

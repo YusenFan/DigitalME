@@ -166,6 +166,78 @@ export function saveConfig(config: PersonaConfig): void {
   });
 }
 
+/**
+ * 验证运行时配置，返回所有发现的问题。
+ */
+export function validateConfig(config: PersonaConfig): string[] {
+  const errors: string[] = [];
+
+  if (!Number.isInteger(config.daemon.port) || config.daemon.port < 1 || config.daemon.port > 65535) {
+    errors.push("daemon.port must be between 1 and 65535");
+  }
+
+  if (!config.daemon.host) {
+    errors.push("daemon.host is required");
+  }
+
+  if (!config.llm.provider) {
+    errors.push("llm.provider is required");
+  }
+
+  if (!config.llm.model) {
+    errors.push("llm.model is required");
+  }
+
+  if (!config.embedding.provider) {
+    errors.push("embedding.provider is required");
+  }
+
+  if (!config.embedding.model) {
+    errors.push("embedding.model is required");
+  }
+
+  if (config.dreaming.decayHalfLifeDays <= 0) {
+    errors.push("dreaming.decayHalfLifeDays must be greater than 0");
+  }
+
+  if (config.dreaming.userMdTokenBudget < 500) {
+    errors.push("dreaming.userMdTokenBudget must be at least 500");
+  }
+
+  if (config.collection.browser.excerptMaxChars <= 0) {
+    errors.push("collection.browser.excerptMaxChars must be greater than 0");
+  }
+
+  if (config.events.retentionDays <= 0) {
+    errors.push("events.retentionDays must be greater than 0");
+  }
+
+  return errors;
+}
+
+/**
+ * 删除已经不对应活跃进程的 PID 文件。
+ */
+export function cleanStalePidFile(): boolean {
+  if (!fs.existsSync(PID_FILE)) {
+    return false;
+  }
+
+  const pid = parseInt(fs.readFileSync(PID_FILE, "utf-8").trim(), 10);
+  if (isNaN(pid)) {
+    fs.unlinkSync(PID_FILE);
+    return true;
+  }
+
+  try {
+    process.kill(pid, 0);
+    return false;
+  } catch {
+    fs.unlinkSync(PID_FILE);
+    return true;
+  }
+}
+
 // ── 内部工具函数 ────────────────────────────────────────
 
 /**

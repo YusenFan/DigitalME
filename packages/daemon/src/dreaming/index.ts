@@ -202,7 +202,7 @@ export async function runDreaming(
         stage: "updating_memory",
         message: `Updating ${inference.memory_updates.length} memory files...`,
       });
-      const updatedFiles = await updateMemoryFiles(inference.memory_updates, llmConfig);
+      const updatedFiles = await updateMemoryFiles(inference.memory_updates, config);
       report.memoryFilesUpdated = updatedFiles;
     }
 

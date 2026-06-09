@@ -16,16 +16,16 @@ Persona Engine is a personal AI memory engine that continuously evolves based on
   Onboarding questionnaire    ──┐
   Directory scan              ──┤                            USER.md
   Browser extension           ──┼── events.sqlite ── Dream ── (abstract persona)
-  Chat conversations          ──┘       │                    memory/
+  Chat conversations          ──┘       │                    mem0 SQLite memory
                                         │                    (detailed, searchable)
                                         │
                                    Chat Interface
-                                   (USER.md + memory/ in system prompt)
+                                   (USER.md + mem0 memories in system prompt)
 ```
 
 **Daytime:** Browser extension silently collects browsing events (URL, title, content excerpt, dwell time). Zero LLM cost.
 
-**Dreaming:** Nightly (or manual) batch processing classifies events, detects behavioral patterns, updates your persona, and manages memory decay. Typically < $0.05 per run.
+**Dreaming:** Nightly (or manual) batch processing classifies events, detects behavioral patterns, updates your persona, and writes long-term memories through mem0. Typically < $0.05 per run.
 
 **Chat:** Ask questions with full persona context injected. Terminal or web UI.
 
@@ -81,7 +81,7 @@ persona chat               # Interactive terminal chat
 # Persona management
 persona user               # View your USER.md
 persona user --edit         # Edit USER.md in $EDITOR
-persona memory             # Browse memory/ directory tree
+persona memory             # Browse mem0 long-term memories
 persona memory coding      # Inspect a specific memory category
 
 # Data queries
@@ -115,8 +115,10 @@ persona-engine/
 ├── persona-engine/      # User data directory (gitignored)
 │   ├── config.json      # Configuration
 │   ├── USER.md          # Abstract persona
-│   ├── events.sqlite    # Raw events + vector embeddings
-│   └── memory/          # Detailed memories by category
+│   ├── events.sqlite    # Raw events
+│   ├── mem0-vectors.db  # mem0 vector memory store
+│   ├── mem0-history.db  # mem0 memory history
+│   └── memory/          # Dreaming logs and metadata
 └── tests/               # Integration tests
 ```
 
@@ -130,6 +132,7 @@ persona-engine/
 | Terminal TUI | Ink (React for CLI) |
 | Browser extension | Manifest V3, Readability.js |
 | LLM client | Vercel AI SDK (OpenAI, Anthropic) |
+| Memory management | mem0 open-source SDK |
 | Embeddings | OpenAI text-embedding-3-small |
 | Build | tsup (esbuild), pnpm workspaces |
 
@@ -146,13 +149,13 @@ Triggered nightly at 23:00 (configurable) or manually via `persona dream`:
 1. **Classify** — Content-based categorization with controlled tag vocabulary
 2. **Infer** — Detect behavioral patterns, learning streaks, focus shifts
 3. **Update USER.md** — Refine abstract persona within token budget
-4. **Update memory/** — Create/merge detailed memory files with YAML frontmatter
-5. **Decay** — Exponential weight decay on stale memories (30-day half-life)
+4. **Update mem0 memories** — Let mem0 extract, dedupe, and persist durable memories
+5. **Decay compatibility** — Keep the report field stable while mem0 manages memory ranking
 6. **Compress** — Keep USER.md within token budget
 
 ### 3. Chat (persona-aware)
 
-System prompt = USER.md + semantically relevant memory/ chunks. Vector embeddings enable semantic search over memories. Supports streaming responses in both terminal and web UI.
+System prompt = USER.md + semantically relevant mem0 memories. mem0 handles memory storage and semantic retrieval. Supports streaming responses in both terminal and web UI.
 
 ## Configuration
 

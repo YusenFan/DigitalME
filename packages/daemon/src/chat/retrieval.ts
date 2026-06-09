@@ -5,10 +5,8 @@
  * 用于注入到聊天系统提示中，让 LLM 具备深度用户理解。
  */
 
-import fs from "node:fs";
-import path from "node:path";
-import { generateEmbedding, semanticSearch, type SearchResult } from "../db/vectors.js";
-import { readUserMd, MEMORY_DIR } from "../dreaming/updater.js";
+import { searchMemories } from "../memory/mem0.js";
+import { readUserMd } from "../dreaming/updater.js";
 import type { PersonaConfig } from "../config.js";
 
 /** 检索结果 — 用于构建系统提示 */
@@ -46,23 +44,13 @@ export async function retrieveContext(
   let memoryChunks: RetrievalContext["memoryChunks"] = [];
 
   try {
-    // 生成查询向量
-    const queryEmbedding = await generateEmbedding(query, config);
+    const results = await searchMemories(query, config, topK);
 
-    // 语义搜索
-    const results = semanticSearch(queryEmbedding, topK);
-
-    // 读取命中文件的完整内容（向量表中存的是截断版本）
     memoryChunks = results.map((r) => {
-      const fullPath = path.join(MEMORY_DIR, r.file_path);
-      let content = r.chunk_text;
-      if (fs.existsSync(fullPath)) {
-        content = fs.readFileSync(fullPath, "utf-8");
-      }
       return {
-        path: r.file_path,
-        content,
-        similarity: r.similarity,
+        path: r.path,
+        content: r.content,
+        similarity: r.score ?? 0,
       };
     });
   } catch {

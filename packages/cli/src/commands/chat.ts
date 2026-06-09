@@ -12,8 +12,7 @@ import readline from "node:readline";
 import { Command } from "commander";
 import { loadConfig } from "../../../daemon/src/config.js";
 import { initDatabase, closeDatabase } from "../../../daemon/src/db/events.js";
-import { initVectorTable } from "../../../daemon/src/db/vectors.js";
-import { chat, type ChatMessage } from "../../../daemon/src/chat/session.js";
+import type { ChatMessage } from "../../../daemon/src/chat/session.js";
 
 export const chatCommand = new Command("chat")
   .description("Start an interactive chat with your persona-aware AI")
@@ -26,9 +25,9 @@ export const chatCommand = new Command("chat")
       process.exit(1);
     }
 
-    // 初始化数据库 + 向量表
+    // 初始化事件数据库
     initDatabase();
-    initVectorTable();
+    const { chat } = await import("../../../daemon/src/chat/session.js");
 
     console.log("");
     console.log("💬 Persona Chat — your AI knows you");

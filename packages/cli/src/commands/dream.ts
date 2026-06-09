@@ -11,7 +11,7 @@
 import { Command } from "commander";
 import { loadConfig } from "../../../daemon/src/config.js";
 import { initDatabase, closeDatabase } from "../../../daemon/src/db/events.js";
-import { runDreaming, type DreamingProgress } from "../../../daemon/src/dreaming/index.js";
+import type { DreamingProgress } from "../../../daemon/src/dreaming/index.js";
 
 /**
  * 解析 --since 参数为 ISO 时间字符串。
@@ -98,6 +98,7 @@ export const dreamCommand = new Command("dream")
       console.log(""); // 空行，让输出更易读
 
       // 运行 dreaming
+      const { runDreaming } = await import("../../../daemon/src/dreaming/index.js");
       const report = await runDreaming(since, (progress) => {
         console.log(formatProgress(progress));
       });
