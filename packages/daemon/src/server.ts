@@ -7,6 +7,7 @@
  *   GET  /api/status       — daemon 健康状态 + 统计摘要
  *   GET  /api/user         — 返回 USER.md 内容
  *   POST /api/chat         — 流式聊天（SSE）
+ *   POST /api/dreaming/run — 手动触发 dreaming pipeline
  *   GET  /chat             — Web 聊天 UI
  *
  * 绑定 127.0.0.1 only（不暴露到网络），CORS 限制为 Chrome extension + localhost。
@@ -68,9 +69,18 @@ interface PostAgentTestBody {
 /** 新事件插入后的回调类型 — 用于通知 TUI 刷新 */
 export type OnEventInserted = (eventIds: number[]) => void;
 
+/** dreaming 控制接口 — 由 index.tsx 注入，server 不直接依赖 dreaming 模块 */
+export interface DreamingControl {
+  /** dreaming 是否正在运行 */
+  isRunning: () => boolean;
+  /** 触发一次 dreaming（fire-and-forget，内部自带防重入锁） */
+  run: () => void;
+}
+
 export interface CreateServerOptions {
   agentRunner?: PersonaAgentRunner;
   persistAgentMessages?: boolean;
+  dreaming?: DreamingControl;
 }
 
 // ── 服务器创建 ──────────────────────────────────────────
@@ -204,7 +214,20 @@ export async function createServer(
       context_switches_today: stats.context_switches,
       browse_time_today_sec: stats.total_browse_sec,
       chat_messages_today: stats.chat_messages,
+      dreaming_running: options.dreaming?.isRunning() ?? false,
     });
+  });
+
+  // ── POST /api/dreaming/run — 手动触发 dreaming ──
+  app.post("/api/dreaming/run", async (_request, reply) => {
+    if (!options.dreaming) {
+      return reply.status(503).send({ error: "Dreaming not available" });
+    }
+    if (options.dreaming.isRunning()) {
+      return reply.status(409).send({ error: "Dreaming already in progress" });
+    }
+    options.dreaming.run();
+    return reply.status(202).send({ started: true });
   });
 
   // ── GET /api/user — 返回 USER.md 内容 ────────

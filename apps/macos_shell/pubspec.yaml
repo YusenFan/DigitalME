@@ -1,0 +1,25 @@
+name: macos_shell
+description: Persona Engine macOS menu bar shell — spawns and controls the Node daemon.
+publish_to: "none"
+version: 0.1.0
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+  # tray_manager: Flutter 本身没有任何状态栏/NSStatusItem API，必须用插件
+  tray_manager: ">=0.4.0 <1.0.0"
+  # window_manager: 需要"启动时隐藏窗口、关窗口不退出"，Flutter 默认做不到
+  window_manager: ">=0.4.0 <1.0.0"
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ">=4.0.0 <7.0.0"
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/tray_icon.png

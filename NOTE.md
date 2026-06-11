@@ -72,7 +72,7 @@ Phase 2 实现了完整的 onboarding 流程：交互式问卷、目录扫描、
 | Decision | Choice | Reason |
 |----------|--------|--------|
 | LLM provider | OpenAI (gpt-5.4) | 用户指定使用 OpenAI API |
-| LLM SDK | Vercel AI SDK (`ai` + `@ai-sdk/openai`) | 多 provider 支持，PRD 推荐 |
+| LLM SDK | Vercel AI SDK (`ai` + `@ai-sdk/openai`) | 多 provider 支持，PRD 推荐
 | Onboarding UI | @clack/prompts | Phase 1 已决定 |
 | 问卷字段 | name, birthday, pronouns, timezone, occupation, interests, social profiles | 用户要求合并 name/preferred name 为单一字段，增加 birthday，增加社交媒体链接 |
 | 文档扫描 | 文件名作为标题信号（不解析内容） | PDF/Word/Excel/Apple iWork 文件只取文件名，避免复杂解析依赖 |
@@ -421,3 +421,205 @@ Phase 6 完成了 v1 发布前的全部打磨工作：补齐所有 CLI 命令（
 - `persona memory` 显示 memory/ 树 ✅
 - `persona events --help` 显示所有选项 ✅
 - 扩展打包 `persona-extension-v0.1.0.zip`（26 KB）✅
+
+---
+
+## 2026-06-10 — Phase 6.5: mem0 Memory Management
+
+### What was built
+
+Phase 6.5 将原先自研的 markdown memory 文件 + SQLite vector 表检索，替换为 mem0 open-source SDK 管理长期记忆。Dreaming pipeline 仍然负责分类、推断和 USER.md 更新，但详细记忆的写入、抽取、去重、持久化和语义检索改由 mem0 处理。
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `packages/daemon/src/memory/mem0.ts` | mem0 封装层 — 配置本地 SQLite vector/history store，提供 `addMemoryUpdates()`, `searchMemories()`, `listMemories()` |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `packages/daemon/src/dreaming/updater.ts` | `updateMemoryFiles()` 改为调用 mem0，而不是创建/合并 markdown memory 文件 |
+| `packages/daemon/src/dreaming/index.ts` | 将完整 `PersonaConfig` 传入 memory updater，供 mem0 使用 LLM/embedding 配置 |
+| `packages/daemon/src/chat/retrieval.ts` | 检索路径改为 `searchMemories()`，不再手动生成 embedding 或查询 `memory_vectors` |
+| `packages/daemon/src/dreaming/decay.ts` | 旧 markdown decay 改为兼容 no-op，保留报告字段稳定性 |
+| `packages/daemon/src/index.tsx` | 移除 daemon 启动时的 `initVectorTable()` |
+| `packages/cli/src/commands/chat.ts` | chat 逻辑改为 action 内动态导入，避免 CLI help 提前加载 mem0 深依赖 |
+| `packages/cli/src/commands/dream.ts` | dream 逻辑改为 action 内动态导入，避免普通 CLI 命令加载 mem0 |
+| `packages/cli/src/commands/memory.ts` | `persona memory` 改为列出/查看 mem0 长期记忆 |
+| `packages/daemon/tsup.config.ts` | external 新增 `mem0ai`, `mem0ai/oss` |
+| `packages/cli/tsup.config.ts` | external 新增 `mem0ai`, `mem0ai/oss` |
+| `packages/daemon/package.json` | 新增依赖 `mem0ai` |
+| `packages/cli/package.json` | 新增依赖 `mem0ai`（CLI 直接运行 dream/chat/memory，需要运行时可解析） |
+| `README.md` | 架构和使用说明从 `memory/` 文件系统改为 mem0 SQLite memory |
+| `pnpm-lock.yaml` | 锁定 `mem0ai@3.0.6` |
+
+### Removed files
+
+| File | Reason |
+|------|--------|
+| `packages/daemon/src/db/vectors.ts` | 旧的自研 embedding + SQLite vector 检索模块已被 mem0 取代 |
+
+### Tech decisions made
+
+1. **mem0 OSS SDK 作为 memory 管理边界** — Persona Engine 不再自己合并 memory 文件、维护 vector 表或计算相似度。代码只把 inferrer 输出交给 mem0，并从 mem0 检索相关记忆。
+2. **Local-first storage** — mem0 vector store 使用本地 SQLite，数据文件放在 `DATA_DIR` 下：`mem0-vectors.db` 和 `mem0-history.db`。
+3. **复用现有 LLM/embedding 配置** — mem0 的 LLM provider/model/API key 和 embedding provider/model 从 `PersonaConfig` 读取，不新增独立配置。
+4. **关闭 mem0 telemetry** — 在动态加载 SDK 前设置 `MEM0_TELEMETRY=false`，保持项目 no telemetry 的隐私承诺。
+5. **动态导入 CLI 重依赖** — `persona --help`, `persona config`, `persona events --help` 等轻量命令不应加载 mem0 及其深依赖。`chat`, `dream`, `memory` 在真正执行时才加载对应模块。
+6. **保留 decay 报告兼容性** — `DreamingReport.decayResults` 暂时保留，避免改动报告结构；实际 memory ranking/管理交给 mem0。
+7. **保留 USER.md 职责** — USER.md 仍是抽象 persona；mem0 只接管详细长期记忆。
+
+### Memory flow after Phase 6.5
+
+```
+Dreaming inferrer
+    │
+    ├── updateUserMd()      → USER.md 抽象 persona
+    └── updateMemoryFiles()
+            │
+            ▼
+        mem0.add()
+            │
+            ├── extract / dedupe / update durable memories
+            ├── persist vectors in mem0-vectors.db
+            └── persist history in mem0-history.db
+
+Chat retrieval
+    │
+    ├── readUserMd()
+    └── mem0.search(query, topK=5)
+            │
+            ▼
+buildSystemPrompt(USER.md + relevant mem0 memories)
+```
+
+### Verification results
+
+- `pnpm --filter @persona-engine/daemon build` ✅
+- `pnpm --filter @persona-engine/cli build` ✅
+- `pnpm test` — 23 tests passed ✅
+- `node packages/cli/dist/index.js memory` smoke test ✅
+
+### Notes
+
+- `pnpm add mem0ai` produced peer warnings for some optional mem0 ecosystem packages (`better-sqlite3`, `pg`, `redis`), but builds, tests, and the CLI smoke test passed.
+- The old `memory/` directory is no longer the primary memory store. It remains useful for existing metadata such as `memory/meta/dreaming-log.md`.
+
+---
+
+## 2026-06-10 — Phase 7: Mastra Agent MVP
+
+### What was built
+
+Phase 7 引入了最小 Mastra agent infra：daemon 内部使用 Mastra Agent + MCP-style typed tools 访问本地 persona 数据，并新增非流式 JSON 测试 API。没有暴露标准 MCP server；所有工具都是只读本地工具。
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `packages/daemon/src/agent/tools.ts` | Mastra `createTool` 工具定义：读取 USER.md、搜索 mem0 memories、查询最近 events、读取今日 status |
+| `packages/daemon/src/agent/persona-agent.ts` | 创建 DigitalME Mastra Agent，注入 USER.md、OpenAI model id、read-only tools |
+| `packages/daemon/src/agent/session.ts` | 统一 agent generate/stream wrapper，负责聊天消息写入 events.sqlite |
+| `tests/agent-api.test.ts` | `/api/agent/test` 路由测试，使用 fake runner，避免真实 LLM 调用 |
+| `tests/agent-tools.test.ts` | agent tools 单元测试，覆盖 profile、memory search fallback、recent events、status |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `packages/daemon/src/server.ts` | `/api/chat` 改用 `streamAgentReply()`；新增 `POST /api/agent/test` JSON 测试端点 |
+| `packages/daemon/src/chat/session.ts` | 改为兼容 shim，转发到新的 agent session |
+| `packages/cli/src/commands/chat.ts` | CLI chat 改用 `streamAgentReply()` |
+| `packages/daemon/src/db/events.ts` | 新增 `getRecentEventsForAgent()`，支持 agent tool 的只读过滤查询 |
+| `packages/daemon/package.json` | 新增 `@mastra/core`, `zod`；升级 `ai` 满足 Mastra peer dependency |
+| `packages/cli/package.json` | 新增 CLI 运行时所需 `@mastra/core`, `zod`；升级 `ai` |
+| `packages/daemon/tsup.config.ts` / `packages/cli/tsup.config.ts` | 将 Mastra 和 zod 标记为 external runtime deps |
+
+### API endpoints added/changed
+
+| Endpoint | Method | Purpose |
+|----------|--------|---------|
+| `/api/chat` | POST | 保持原 SSE contract，但内部改由 Mastra agent streaming 驱动 |
+| `/api/agent/test` | POST | 非流式测试 API，接受 `{ message, history?, includeDebug? }`，返回 `{ reply, toolCalls?, toolResults? }` |
+
+### Agent tools
+
+| Tool | Purpose |
+|------|---------|
+| `persona_get_profile` | 读取当前 USER.md |
+| `persona_search_memories` | 通过现有 mem0 `searchMemories()` 搜索长期记忆 |
+| `persona_get_recent_events` | 查询最近本地 events，支持 `limit/status/type` |
+| `persona_get_status` | 返回今日本地状态摘要 |
+
+### Tech decisions made
+
+1. **保留 mem0 memory management** — dreaming 仍通过 mem0 写入长期记忆；agent 只通过 tool 调用 `searchMemories()` 读取。
+2. **不暴露 MCP server** — MVP 只采用 MCP-style typed tool 设计，避免新增外部协议面。
+3. **只读工具优先** — 所有 agent tools 都带 read-only MCP annotations，不修改本地数据。
+4. **Fastify 继续作为 API 边界** — Mastra 嵌入 daemon 内部，现有 HTTP/TUI/CLI 架构不重做。
+5. **测试不调用真实 LLM** — `/api/agent/test` 使用 injected fake runner 测试路由行为。
+
+### Verification results
+
+- `pnpm build` 全部 workspace build 成功 ✅
+- `pnpm test` 30 个测试全部通过 ✅
+
+---
+
+## 2026-06-10 — Phase 8: macOS Menu Bar Shell (Flutter)
+
+### What was done
+
+把 Persona Engine 包装成 macOS 状态栏 App 的第一步（对应 `macos-migration-plan.md` 的 Phase 1–4 代码部分）。Flutter 只做壳：spawn/停止 node daemon、轮询健康状态、tray 菜单。daemon 业务逻辑零重写。
+
+### New files
+
+| File | Purpose |
+|------|---------|
+| `macos-migration-plan.md` | 完整迁移方案（架构、阶段、macOS 权限、技术决策） |
+| `apps/macos_shell/pubspec.yaml` | Flutter 项目定义；仅两个插件：tray_manager（NSStatusItem）、window_manager（隐藏窗口/关窗不退出） |
+| `apps/macos_shell/lib/main.dart` | tray 菜单（Open Chat / Start-Stop / Status / Run Dreaming Now / Settings / Quit）+ 默认隐藏的状态窗口 |
+| `apps/macos_shell/lib/daemon_controller.dart` | 进程管理（spawn node --headless / SIGTERM / 防孤儿）+ /api/status 轮询 + 路径解析（dev 模式从可执行文件路径反推 repo 根） |
+| `apps/macos_shell/assets/tray_icon.png` | 模板图标（黑+透明，isTemplate 自动适配深浅色） |
+| `scripts/setup_macos_shell.sh` | 一键生成 macos/ Runner + 打补丁：LSUIElement=true、删 App Sandbox entitlement |
+
+### Modified files
+
+| File | Changes |
+|------|---------|
+| `packages/daemon/src/server.ts` | 新增 `POST /api/dreaming/run`（409 防重入）；`/api/status` 加 `dreaming_running` 字段；`CreateServerOptions` 加 `dreaming?: DreamingControl` 注入接口 |
+| `packages/daemon/src/index.tsx` | dreaming 状态块上移到 createServer 之前（端点需要引用锁）；`triggerDream` 改为同步上锁 + finally 释放；新增 `--headless` 参数跳过 Ink TUI（供 GUI spawn 使用） |
+
+### Tech decisions made
+
+1. **Flutter spawn 而非 launch agent** — 一个进程拥有者，Quit 即全停；launch agent 留给 v2 真常驻需求。
+2. **聊天复用 daemon 的 /chat Web UI** — 浏览器打开，不在 Flutter 里重写聊天界面。
+3. **external 实例不接管** — 端口上已有 CLI 启动的 daemon 时菜单只显示状态，Stop 禁用。
+4. **App Sandbox 必须关闭** — daemon 要扫任意目录 + spawn node，沙箱下全失败；放弃 App Store 分发。
+5. **数据目录不变** — 仍是 `~/.persona-engine/`，CLI / TUI / App 共享同一份数据。
+
+### Verification results
+
+- `tsc --noEmit`：server.ts / index.tsx 无类型错误 ✅（其余报错为本 phase 之前已存在，tsup 构建不受影响）
+- Dart 代码需在 Mac 上 `flutter analyze` 验证（本环境无 Flutter SDK）⏳
+- 待用户在 Mac 上执行：`pnpm build` → `bash scripts/setup_macos_shell.sh` → `flutter run -d macos`
+
+### How to run
+
+```bash
+pnpm build                              # 构建 daemon
+bash scripts/setup_macos_shell.sh       # 生成 Runner + 补丁（只需一次）
+cd apps/macos_shell && flutter run -d macos
+```
+
+### Fix (2026-06-11): 启动即静默退出、无 tray 图标
+
+原因：Flutter macOS 模板的 `AppDelegate.applicationShouldTerminateAfterLastWindowClosed` 默认返回 `true`，窗口在启动时被隐藏后 App 直接退出（无崩溃报告、无 Dart 异常）。
+
+修复（均为 window_manager 文档要求的集成步骤）：
+- `AppDelegate.swift`：`applicationShouldTerminateAfterLastWindowClosed` 改为 `false`
+- `MainFlutterWindow.swift`：加 `hiddenWindowAtLaunch()`（官方 "Hidden at launch" 集成），启动隐藏改由原生侧处理
+- `lib/main.dart`：移除 Dart 侧启动时的 `windowManager.hide()`
+- `scripts/setup_macos_shell.sh`：以上两个 Swift 补丁加入脚本（幂等），全新 checkout 可重现
